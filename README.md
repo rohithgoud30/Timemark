@@ -29,6 +29,7 @@ It works with any folder of videos: a course, a set of recorded talks, or your o
 - **The full system player.** Play and pause, scrubbing, skipping, volume, playback speed, captions, frame stepping, Picture in Picture, AirPlay, and full screen. It's the same `AVPlayerView` as QuickTime Player.
 - **Notes pinned to moments.** Press ⌘N and the video pauses. Write your note and press Return, and it's saved at that timestamp.
 - **Note timeline.** Every note is a pin on the ruler under the video. Hover a pin to read the note, and click it to jump there. As the video plays past a note, that note's text shows on the ruler.
+- **Chapters, YouTube style.** If a video has chapters, the timeline is split into one segment per chapter. Hover the timeline and that segment grows, with a preview of the chapter's thumbnail, title, and time floating above it. The side panel's **Chapters** tab lists every chapter with a thumbnail and start time, highlights the one playing, and jumps there when clicked. The **Chapters** toolbar menu and ⌥⌘[ or ⌥⌘] work too.
 - **Lesson library.** Videos are grouped by week. Each lesson shows its title, its day, and how many notes it has.
 - **Notes panel.** The note you're currently at is marked in highlighter yellow. Edit, delete, and multi-select notes with standard macOS gestures, and undo or redo any change.
 - **Fits the video.** The window sizes itself to the video, so there are no empty bars. In full screen or a maximized window, the video is centered on black.
@@ -73,6 +74,7 @@ The project is signed to run locally (ad hoc). To share a build with someone els
 | Play or pause (from the menu) | ⌥⌘P |
 | Play or pause (player focused) | Space |
 | Skip back or forward 10 seconds | ⌥⌘← or ⌥⌘→ |
+| Previous or next chapter | ⌥⌘[ or ⌥⌘] |
 | Previous or next lesson | ⌘[ or ⌘] |
 | Undo or redo | ⌘Z or ⇧⌘Z |
 | Delete the selected notes | Delete |
@@ -132,6 +134,7 @@ Timemark/
 
 ## Known limitations
 
+- Chapters are read from the video file (QuickTime-style chapter tracks, which most video tools can write). Timemark doesn't create or edit chapters.
 - Note pins sit on Timemark's own timeline, not on the player's built-in scrubber. macOS has no public API for adding markers there.
 - One window at a time.
 

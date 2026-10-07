@@ -8,11 +8,41 @@ struct NotesPane: View {
     @State private var draft = ""
     @State private var draftTime: Double?
     @State private var composing = false
+    @State private var tab = Tab.notes
     @FocusState private var composerFocused: Bool
+
+    enum Tab { case notes, chapters }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if tab == .chapters {
+                ChaptersList()
+            } else {
+                notesList
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: composing)
+        // Next run-loop tick, so focus lands after the composer appears and the player gives up first responder.
+        .onChange(of: library.composeRequest) {
+            tab = .notes
+            composing = true
+            DispatchQueue.main.async { composerFocused = true }
+        }
+        .onChange(of: composerFocused) { _, focused in
+            if focused && draftTime == nil {
+                library.pause()
+                draftTime = library.time
+            }
+        }
+        .onChange(of: library.current) {
+            selection = []
+            editing = nil
+            closeComposer()
+        }
+    }
+
+    @ViewBuilder private var notesList: some View {
             List(selection: $selection) {
                 ForEach(library.notes) { note in
                     NoteRow(
@@ -70,24 +100,6 @@ struct NotesPane: View {
                 composer
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-        }
-        .animation(.snappy(duration: 0.2), value: composing)
-        // Next run-loop tick, so focus lands after the composer appears and the player gives up first responder.
-        .onChange(of: library.composeRequest) {
-            composing = true
-            DispatchQueue.main.async { composerFocused = true }
-        }
-        .onChange(of: composerFocused) { _, focused in
-            if focused && draftTime == nil {
-                library.pause()
-                draftTime = library.time
-            }
-        }
-        .onChange(of: library.current) {
-            selection = []
-            editing = nil
-            closeComposer()
-        }
     }
 
     /// The note playback most recently passed, marked with the highlighter.
@@ -96,14 +108,13 @@ struct NotesPane: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Notes").font(.title3.weight(.semibold))
-            Spacer()
-            if !library.notes.isEmpty {
-                Text(library.notes.count == 1 ? "1 note" : "\(library.notes.count) notes")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+        HStack {
+            Picker("Show", selection: $tab) {
+                Text(library.notes.isEmpty ? "Notes" : "Notes (\(library.notes.count))").tag(Tab.notes)
+                Text(library.chapters.isEmpty ? "Chapters" : "Chapters (\(library.chapters.count))").tag(Tab.chapters)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -161,6 +172,59 @@ struct NotesPane: View {
         draftTime = nil
         composerFocused = false
         composing = false
+    }
+}
+
+/// The video's chapters with a thumbnail and start time, like YouTube's chapter list.
+/// The chapter playing now is highlighted and kept in view; click one to jump there.
+struct ChaptersList: View {
+    @EnvironmentObject private var library: LibraryModel
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            List(library.chapters) { chapter in
+                let isCurrent = chapter == library.currentChapter
+                Button { library.seek(to: chapter.start) } label: {
+                    HStack(spacing: 10) {
+                        Group {
+                            if let image = library.chapterThumbnails[chapter.start] {
+                                Image(nsImage: image).resizable().aspectRatio(16 / 9, contentMode: .fill)
+                            } else {
+                                Rectangle().fill(.quaternary)
+                            }
+                        }
+                        .frame(width: 96, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(isCurrent ? Color.highlighter : .clear, lineWidth: 2))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(chapter.title)
+                                .font(.callout.weight(isCurrent ? .semibold : .regular))
+                                .lineLimit(2)
+                            Text(chapter.start.timestamp)
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 2)
+                .listRowBackground(isCurrent ? Color.highlighter.opacity(0.14) : Color.clear)
+                .id(chapter.id)
+                .accessibilityLabel("\(chapter.title), at \(chapter.start.timestamp)")
+            }
+            .scrollContentBackground(.hidden)
+            .onChange(of: library.currentChapter) { _, chapter in
+                if let chapter { withAnimation { proxy.scrollTo(chapter.id, anchor: .center) } }
+            }
+            .overlay {
+                if library.chapters.isEmpty && library.current != nil {
+                    ContentUnavailableView("No chapters", systemImage: "list.bullet",
+                                           description: Text("This video has no chapters."))
+                }
+            }
+        }
     }
 }
 

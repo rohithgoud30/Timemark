@@ -29,6 +29,13 @@ struct TimemarkApp: App {
                 Button("Skip Forward 10 Seconds") { library.skip(by: 10) }
                     .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                 Divider()
+                Button("Previous Chapter") { library.jumpChapter(-1) }
+                    .keyboardShortcut("[", modifiers: [.command, .option])
+                    .disabled(library.chapters.isEmpty)
+                Button("Next Chapter") { library.jumpChapter(1) }
+                    .keyboardShortcut("]", modifiers: [.command, .option])
+                    .disabled(library.chapters.isEmpty)
+                Divider()
                 Button("Previous Video") { library.openAdjacent(-1) }
                     .keyboardShortcut("[")
                     .disabled(!library.hasPrevious)

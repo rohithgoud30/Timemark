@@ -1,6 +1,13 @@
 import AppKit
 import AVFoundation
 
+/// A named part of a video, read from the chapters stored inside the file.
+struct Chapter: Identifiable, Hashable {
+    let start: Double
+    let title: String
+    var id: Double { start }
+}
+
 struct Note: Codable, Identifiable, Hashable {
     var id = UUID()
     var time: Double
@@ -27,6 +34,11 @@ extension Double {
     @Published private(set) var isPlaying = false
     /// Width / height of the current video, so the player has no letterbox bars.
     @Published private(set) var videoAspect: CGFloat = 16.0 / 9.0
+    @Published private(set) var chapters: [Chapter] = []
+    /// One frame per chapter, for the hover preview and the chapters list.
+    @Published private(set) var chapterThumbnails: [Double: NSImage] = [:]
+    /// The moment under the pointer on the timeline, shown as a preview card above it.
+    @Published var hoverTime: Double?
     @Published private(set) var noteCounts: [URL: Int] = [:]
     private var infos: [URL: VideoInfo] = [:]
     /// Bumped by the Add Note command; the notes pane focuses its composer when it changes.
@@ -101,6 +113,9 @@ extension Double {
         current = url
         time = 0
         duration = 0
+        chapters = []
+        chapterThumbnails = [:]
+        hoverTime = nil
         player.replaceCurrentItem(with: AVPlayerItem(url: url))
         // Read length and shape from the file, so the ruler and player size are right before playback starts.
         Task {
@@ -108,6 +123,10 @@ extension Double {
             if let length = try? await asset.load(.duration).seconds, length.isFinite, self.current == url {
                 self.duration = length
             }
+            let found = await Self.loadChapters(of: asset)
+            if self.current == url { self.chapters = found }
+            let thumbs = await Self.thumbnails(for: found, of: asset)
+            if self.current == url { self.chapterThumbnails = thumbs }
             guard let track = try? await asset.loadTracks(withMediaType: .video).first,
                   let (size, transform) = try? await track.load(.naturalSize, .preferredTransform) else { return }
             let shown = size.applying(transform)
@@ -126,6 +145,55 @@ extension Double {
     var hasNext: Bool { current.flatMap { videos.firstIndex(of: $0) }.map { $0 < videos.count - 1 } ?? false }
 
     func info(for url: URL) -> VideoInfo { infos[url] ?? VideoInfo(url: url) }
+
+    // MARK: Chapters
+
+    /// Chapters stored in the video file (QuickTime chapter track), in time order. Empty when the file has none.
+    private static func loadChapters(of asset: AVURLAsset) async -> [Chapter] {
+        let locales = (try? await asset.load(.availableChapterLocales))?.map(\.identifier) ?? []
+        guard let groups = try? await asset.loadChapterMetadataGroups(
+            bestMatchingPreferredLanguages: locales.isEmpty ? ["und"] : locales) else { return [] }
+        var result: [Chapter] = []
+        for group in groups {
+            let item = group.items.first { $0.commonKey == .commonKeyTitle }
+            let title = (try? await item?.load(.stringValue)) ?? nil
+            result.append(Chapter(start: group.timeRange.start.seconds, title: title ?? "Chapter \(result.count + 1)"))
+        }
+        return result.sorted { $0.start < $1.start }
+    }
+
+    /// A small frame from each chapter, taken just before it ends, when everything in it is on screen.
+    private static func thumbnails(for chapters: [Chapter], of asset: AVURLAsset) async -> [Double: NSImage] {
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 320, height: 180)
+        // Exact frames: by default it returns the nearest keyframe, often seconds earlier, before the slide filled in.
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        var result: [Double: NSImage] = [:]
+        for (i, chapter) in chapters.enumerated() {
+            let end = i + 1 < chapters.count ? chapters[i + 1].start : (try? await asset.load(.duration).seconds) ?? chapter.start
+            let at = max(chapter.start, end - 0.6)
+            if let (image, _) = try? await generator.image(at: CMTime(seconds: at, preferredTimescale: 600)) {
+                result[chapter.start] = NSImage(cgImage: image, size: .zero)
+            }
+        }
+        return result
+    }
+
+    func chapter(at t: Double) -> Chapter? { chapters.last { $0.start <= t } }
+
+    /// The chapter playback is in now.
+    var currentChapter: Chapter? { chapters.last { $0.start <= time + 0.25 } }
+
+    /// Next or previous chapter. Going back more than 3 seconds into a chapter restarts it first, like other players.
+    func jumpChapter(_ step: Int) {
+        guard !chapters.isEmpty else { return }
+        let i = chapters.lastIndex { $0.start <= time + 0.25 } ?? 0
+        if step < 0, time - chapters[i].start > 3 { return seek(to: chapters[i].start) }
+        let target = min(max(i + step, 0), chapters.count - 1)
+        seek(to: chapters[target].start)
+    }
 
     // MARK: Playback
 

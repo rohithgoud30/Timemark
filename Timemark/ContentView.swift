@@ -25,6 +25,20 @@ struct ContentView: View {
                 }
                 .toolbar {
                     ToolbarItemGroup {
+                        Menu("Chapters", systemImage: "list.bullet") {
+                            ForEach(library.chapters) { chapter in
+                                Button { library.seek(to: chapter.start) } label: {
+                                    // A checkmark on the chapter playing now, like other macOS menus.
+                                    if chapter == library.currentChapter {
+                                        Label("\(chapter.start.timestamp)   \(chapter.title)", systemImage: "checkmark")
+                                    } else {
+                                        Text("\(chapter.start.timestamp)   \(chapter.title)")
+                                    }
+                                }
+                            }
+                        }
+                        .help("Jump to a chapter")
+                        .disabled(library.chapters.isEmpty)
                         Button("Add Note", systemImage: "pencil.line") { library.composeRequest += 1 }
                             .help("Pause and add a note at this moment (⌘N)")
                             .disabled(library.current == nil)
@@ -98,10 +112,12 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .background(.black)
                 Divider()
+                // A shaped background rather than a clip, so the chapter preview can float above the timeline.
                 MarkerStrip()
-                    .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: PlayerView.cornerRadius,
-                                                      bottomTrailingRadius: PlayerView.cornerRadius,
-                                                      style: .continuous))
+                    .background(.bar, in: UnevenRoundedRectangle(bottomLeadingRadius: PlayerView.cornerRadius,
+                                                                  bottomTrailingRadius: PlayerView.cornerRadius,
+                                                                  style: .continuous))
+                    .zIndex(1)
             }
             .overlay(RoundedRectangle(cornerRadius: PlayerView.cornerRadius, style: .continuous).strokeBorder(.separator))
             .padding(Self.stageInset)
