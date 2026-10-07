@@ -1,11 +1,34 @@
 import AppKit
 import AVFoundation
 
-/// A named part of a video, read from the chapters stored inside the file.
-struct Chapter: Identifiable, Hashable {
+/// A named part of a video, from `<video>.chapters.json` when present (which can add related links),
+/// else from the chapters stored inside the file.
+struct Chapter: Identifiable, Hashable, Decodable {
     let start: Double
     let title: String
+    var links: [ChapterLink] = []
     var id: Double { start }
+
+    enum CodingKeys: CodingKey { case start, title, links }
+
+    init(start: Double, title: String, links: [ChapterLink] = []) {
+        self.start = start
+        self.title = title
+        self.links = links
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        start = try c.decode(Double.self, forKey: .start)
+        title = try c.decode(String.self, forKey: .title)
+        links = try c.decodeIfPresent([ChapterLink].self, forKey: .links) ?? []
+    }
+}
+
+/// A related link for a chapter, such as the docs section it teaches.
+struct ChapterLink: Hashable, Decodable {
+    let label: String
+    let url: URL
 }
 
 struct Note: Codable, Identifiable, Hashable {
@@ -123,7 +146,8 @@ extension Double {
             if let length = try? await asset.load(.duration).seconds, length.isFinite, self.current == url {
                 self.duration = length
             }
-            let found = await Self.loadChapters(of: asset)
+            var found = Self.chaptersFile(for: url) ?? []
+            if found.isEmpty { found = await Self.loadChapters(of: asset) }
             if self.current == url { self.chapters = found }
             let thumbs = await Self.thumbnails(for: found, of: asset)
             if self.current == url { self.chapterThumbnails = thumbs }
@@ -147,6 +171,14 @@ extension Double {
     func info(for url: URL) -> VideoInfo { infos[url] ?? VideoInfo(url: url) }
 
     // MARK: Chapters
+
+    /// Chapters with related links from `<video>.chapters.json` beside the video, or nil when there's no such file.
+    private static func chaptersFile(for video: URL) -> [Chapter]? {
+        let file = video.deletingPathExtension().appendingPathExtension("chapters.json")
+        guard let data = try? Data(contentsOf: file),
+              let chapters = try? JSONDecoder().decode([Chapter].self, from: data), !chapters.isEmpty else { return nil }
+        return chapters.sorted { $0.start < $1.start }
+    }
 
     /// Chapters stored in the video file (QuickTime chapter track), in time order. Empty when the file has none.
     private static func loadChapters(of asset: AVURLAsset) async -> [Chapter] {

@@ -182,6 +182,8 @@ struct NotesPane: View {
 /// The chapter playing now is highlighted and kept in view; click one to jump there.
 struct ChaptersList: View {
     @EnvironmentObject private var library: LibraryModel
+    /// Chapters whose related links are expanded.
+    @State private var expanded = Set<Double>()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -204,8 +206,13 @@ struct ChaptersList: View {
                             Text(chapter.title)
                                 .font(.callout.weight(isCurrent ? .semibold : .regular))
                                 .lineLimit(2)
-                            Text(chapter.start.timestamp)
-                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Text(chapter.start.timestamp)
+                                    .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                                if !chapter.links.isEmpty { linksToggle(chapter) }
+                            }
+                            // Related links, such as the docs section this chapter teaches, shown on demand.
+                            if expanded.contains(chapter.start) { linksPanel(chapter) }
                         }
                         Spacer(minLength: 0)
                     }
@@ -218,6 +225,8 @@ struct ChaptersList: View {
                 .accessibilityLabel("\(chapter.title), at \(chapter.start.timestamp)")
             }
             .scrollContentBackground(.hidden)
+            .animation(.snappy(duration: 0.18), value: expanded)
+            .onChange(of: library.current) { expanded = [] }
             .onChange(of: library.currentChapter) { _, chapter in
                 if let chapter { withAnimation { proxy.scrollTo(chapter.id, anchor: .center) } }
             }
@@ -228,6 +237,48 @@ struct ChaptersList: View {
                 }
             }
         }
+    }
+}
+
+extension ChaptersList {
+    /// A small link icon with a count; click it to show or hide the chapter's links.
+    fileprivate func linksToggle(_ chapter: Chapter) -> some View {
+        let open = expanded.contains(chapter.start)
+        return Button {
+            if open { expanded.remove(chapter.start) } else { expanded.insert(chapter.start) }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "link")
+                Text("\(chapter.links.count)").monospacedDigit()
+                Image(systemName: "chevron.down").imageScale(.small).rotationEffect(.degrees(open ? 180 : 0))
+            }
+            .font(.caption)
+            .foregroundStyle(open ? Color.accentColor : .secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.quaternary.opacity(open ? 1 : 0.6), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(open ? "Hide related links" : "Show related links")
+        .accessibilityLabel(open ? "Hide \(chapter.links.count) related links" : "Show \(chapter.links.count) related links")
+    }
+
+    /// The expanded panel: one row per link, opening in the browser.
+    fileprivate func linksPanel(_ chapter: Chapter) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(chapter.links, id: \.self) { link in
+                Link(destination: link.url) {
+                    Label(link.label, systemImage: "arrow.up.right.square").lineLimit(1)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                .help(link.url.absoluteString)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
