@@ -8,7 +8,8 @@ struct NotesPane: View {
     @State private var draft = ""
     @State private var draftTime: Double?
     @State private var composing = false
-    @State private var tab = Tab.notes
+    /// Chapters first: each video opens on its chapter list. ⌘N switches to Notes to write.
+    @State private var tab = Tab.chapters
     @FocusState private var composerFocused: Bool
 
     enum Tab { case notes, chapters }
@@ -16,7 +17,8 @@ struct NotesPane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if tab == .chapters {
+            // A video without chapters shows its notes instead of an empty list.
+            if tab == .chapters && !library.chapters.isEmpty {
                 ChaptersList()
             } else {
                 notesList
@@ -36,6 +38,7 @@ struct NotesPane: View {
             }
         }
         .onChange(of: library.current) {
+            tab = .chapters
             selection = []
             editing = nil
             closeComposer()
@@ -109,9 +112,9 @@ struct NotesPane: View {
 
     private var header: some View {
         HStack {
-            Picker("Show", selection: $tab) {
-                Text(library.notes.isEmpty ? "Notes" : "Notes (\(library.notes.count))").tag(Tab.notes)
+            Picker("Show", selection: Binding(get: { library.chapters.isEmpty ? .notes : tab }, set: { tab = $0 })) {
                 Text(library.chapters.isEmpty ? "Chapters" : "Chapters (\(library.chapters.count))").tag(Tab.chapters)
+                Text(library.notes.isEmpty ? "Notes" : "Notes (\(library.notes.count))").tag(Tab.notes)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
