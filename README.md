@@ -14,6 +14,7 @@
   <img alt="Swift 5" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
   <img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI-0A84FF">
   <img alt="App Sandbox" src="https://img.shields.io/badge/App%20Sandbox-enabled-34C759">
+  <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey">
 </p>
 
 
@@ -134,3 +135,6 @@ Timemark/
 - Note pins sit on Timemark's own timeline, not on the player's built-in scrubber. macOS has no public API for adding markers there.
 - One window at a time.
 
+## License
+
+Timemark is released under the [MIT License](LICENSE).
